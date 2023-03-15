@@ -1,0 +1,53 @@
+version: "3.9"
+
+# First time doing microservices with Docker Compose instead of a monolith.
+# Django: one container. FastAPI: one container per service + shared infra.
+# The networking is surprisingly simple — services can call each other by name.
+
+services:
+  users:
+    build: ./services/users
+    ports: ["8001:8001"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db_users/users_db
+      JWT_SECRET: changeme
+    depends_on: [db_users, rabbitmq]
+
+  orders:
+    build: ./services/orders
+    ports: ["8002:8002"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db_orders/orders_db
+      USERS_SERVICE_URL: http://users:8001
+    depends_on: [db_orders, rabbitmq]
+
+  notifications:
+    build: ./services/notifications
+    ports: ["8003:8003"]
+    environment:
+      RABBITMQ_URL: amqp://guest:guest@rabbitmq:5672/
+    depends_on: [rabbitmq]
+
+  db_users:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: users_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes: [pgdata_users:/var/lib/postgresql/data]
+
+  db_orders:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: orders_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes: [pgdata_orders:/var/lib/postgresql/data]
+
+  rabbitmq:
+    image: rabbitmq:3.11-management-alpine
+    ports: ["5672:5672", "15672:15672"]
+
+volumes:
+  pgdata_users:
+  pgdata_orders:
