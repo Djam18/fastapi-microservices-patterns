@@ -1,0 +1,55 @@
+name: CI
+
+# Microservices CI — run each service's tests independently.
+# Django: one test run for the whole project. Here: matrix per service.
+# Each service is isolated, so they can fail/succeed independently.
+# This becomes powerful when services deploy separately (different cadence).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [users, orders]
+      fail-fast: false   # Run all services even if one fails
+
+    name: "Test: ${{ matrix.service }}"
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies (${{ matrix.service }})
+        working-directory: services/${{ matrix.service }}
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt pytest pytest-asyncio anyio httpx
+
+      - name: Run tests (${{ matrix.service }})
+        working-directory: services/${{ matrix.service }}
+        env:
+          DATABASE_URL: sqlite+aiosqlite:///./test.db
+          JWT_SECRET:   test-secret
+        run: pytest app/tests.py -v
+
+  lint:
+    runs-on: ubuntu-latest
+    name: "Lint: ruff"
+
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - run: pip install ruff
+      - run: ruff check services/ shared/ --ignore E501
